@@ -12,7 +12,7 @@ from torch.autograd import Variable
 import torch.nn.functional as Funct
 
 
-class Encoder(nn.Module):  # none of this is going to work properly
+class Encoder(nn.Module):
     def __init__(self,
                  input_size,
                  hidden_size,
@@ -97,7 +97,7 @@ class Generator(nn.Module):
             _, idx = torch.max(x_t, 0)  # send out one-hot vectors for most likely word
             indices.append(idx)
 
-        indices = torch.stack(indices, dim=1)
+        indices = torch.stack(indices, dim=1)  # this should be dimension [batch, seq, input_lang.n_words]
 
         return indices, hidden
 
@@ -119,10 +119,9 @@ class Discriminator(nn.Module):
         self.dirs = 2 if bidirectional else 1
         self.use_cuda = use_cuda
 
-        self.disc_input = data_dim + feature_dim
-        self.enc = nn.Embedding(self.disc_input, hidden_size)
+        self.enc = nn.Embedding(data_dim, hidden_size)
         self.disc_gru = nn.GRU(
-            input_size=hidden_size,
+            input_size=feature_dim + hidden_size,  # we've concatenated the embedded thing now
             hidden_size=hidden_size,
             batch_first=True,
             bidirectional=bidirectional
@@ -139,13 +138,14 @@ class Discriminator(nn.Module):
         return h
 
     def forward(self, data, feature, hidden):
-        x = torch.cat([data, feature], 2)
         embedded = []
-        for x_t in torch.unbind(x, 1):
+        for x_t in torch.unbind(data, 1):
             x_t = self.enc(x_t.view(x_t.size(0), -1))
             embedded.append(x_t)
         embedded = torch.stack(embedded, dim=1)
         
-        _, hidden = self.disc_gru(embedded, hidden)
+        x = torch.cat([embedded, feature], 2)
+        
+        _, hidden = self.disc_gru(x, hidden)
         x = self.disc(hidden.transpose(0, 1).view(hidden.size(0), -1))
         return x, hidden
