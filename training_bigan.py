@@ -18,6 +18,7 @@ import torch.nn.functional as Funct
 from utils import *
 from model import Encoder, Generator, Discriminator
 
+# This still doesn't work
 
 use_cuda = False
 SOS_token = 0
@@ -43,12 +44,14 @@ input_size = input_lang.n_words
 hidden_size = 256
 batch = 1
 
-Q = Encoder(input_size, hidden_size, use_cuda=use_cuda)
-P = Generator(hidden_size, hidden_size, use_cuda=use_cuda)
-D = Discriminator(input_size, hidden_size, use_cuda=use_cuda)
+to_onehot = IdxToOneHot(input_size)
 
-G_optimizer = optim.Adam(chain(Q.parameters(), P.parameters()), lr=2e-3)
-D_optimizer = optim.Adam(D.parameters(), lr=5e-6)
+Q = Encoder(input_size, hidden_size, use_cuda=use_cuda)
+P = Generator(hidden_size, hidden_size, input_size, use_cuda=use_cuda)
+D = Discriminator(input_size, hidden_size, 64, use_cuda=use_cuda)
+
+G_optimizer = optim.Adam(chain(Q.parameters(), P.parameters()), lr=5e-5, betas=(0.5, 0.999))
+D_optimizer = optim.Adam(D.parameters(), lr=5e-5, betas=(0.5, 0.999))
 
 criterion = nn.CrossEntropyLoss()
 
@@ -61,19 +64,18 @@ h_D_gen = D.init_hidden(batch)
 
 for epoch in range(int(1e5)):
 
-    x = random.choice(training_pairs[epoch])
+    x = training_pairs[epoch][0]
     x = x.unsqueeze(0).cpu()
     z = Variable(torch.rand(batch, x.size(1), hidden_size))
 
     reset_grad([Q, P, D])
 
+    x = to_onehot(x.squeeze()).unsqueeze(0)
+
     E_x, h_E = Q(x.cpu(), h_Q.cpu())
     G_z, h_G = P(z.cpu(), h_P.cpu())  # problem is ill-formed, G(z) isn't in data space
 
-    xp = torch.stack(
-        [Q.embedding(x_t) for x_t in torch.unbind(x, 1)], dim=1
-    ).squeeze(2)
-    D_enc, h_D_enc = D(xp, E_x, h_D_enc)
+    D_enc, h_D_enc = D(x, E_x, h_D_enc)
     # target_enc = Variable(torch.LongTensor([0]))
     D_gen, h_D_gen = D(G_z, z, h_D_gen)
     # target_gen = Variable(torch.LongTensor([1]))
@@ -95,7 +97,7 @@ for epoch in range(int(1e5)):
     E_x, h_Q = Q(x.cpu(), h_Q.cpu())
     G_z, h_P = P(z.cpu(), h_P.cpu())
 
-    D_enc, h_D_enc = D(xp, E_x, h_D_enc)
+    D_enc, h_D_enc = D(x, E_x, h_D_enc)
     # target_enc = Variable(torch.LongTensor([0]))
     D_gen, h_D_gen = D(G_z, z, h_D_gen)
     # target_gen = Variable(torch.LongTensor([1]))
@@ -113,6 +115,6 @@ for epoch in range(int(1e5)):
     h_D_gen = Variable(h_D_gen.data)
     reset_grad([Q, P, D])
 
-    if epoch % 1000 == 0:
+    if epoch % 100 == 0:
         print('Iter-{}; D_loss: {:.4}; G_loss: {:.4}'
               .format(epoch, D_loss.data[0], G_loss.data[0]))

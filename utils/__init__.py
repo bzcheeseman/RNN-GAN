@@ -31,6 +31,17 @@ eng_prefixes = (
 )
 
 
+class IdxToOneHot:
+    def __init__(self, total_num_indices):
+        self.I = Variable(torch.eye(total_num_indices, total_num_indices))
+
+    def forward(self, x):
+        return torch.index_select(self.I, 0, x)
+
+    def __call__(self, input):
+        return self.forward(input)
+
+
 class Lang:
     def __init__(self, name):
         self.name = name
@@ -94,8 +105,8 @@ def read_langs(lang1, lang2, reverse=False):
 
 def filter_pair(p):
     return len(p[0].split(' ')) < MAX_LENGTH and \
-        len(p[1].split(' ')) < MAX_LENGTH  # and \
-        # p[1].startswith(eng_prefixes)
+        len(p[1].split(' ')) < MAX_LENGTH and \
+         p[1].startswith(eng_prefixes)
 
 
 def filter_pairs(pairs):

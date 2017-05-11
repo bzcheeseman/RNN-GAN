@@ -16,8 +16,8 @@ class Generator(nn.Module):
     def __init__(self, 
                  input_size, 
                  hidden_size,
-                 num_layers,
                  output_size,  # equal to the dimension of the word vector, input_lang.n_words
+                 num_layers=1,
                  bidirectional=False):
         super(Generator, self).__init__()
         
@@ -25,12 +25,11 @@ class Generator(nn.Module):
         self.num_layers = num_layers
         self.dirs = 2 if bidirectional else 1
         
-        
         self.gru = nn.GRU(
             input_size=input_size,
             hidden_size=hidden_size,
             num_layers=num_layers,
-            batch_first=True
+            batch_first=True,
             bidirectional=bidirectional
         )
         
@@ -42,20 +41,19 @@ class Generator(nn.Module):
         
     def forward(self, x, hidden):
         x, hidden = self.gru(x, hidden)
-        indices = []
+        outputs = []
         for x_t in torch.unbind(x, 1):
             x_t = Funct.softmax(self.decode(x_t))
-            _, idx = torch.max(x_t, 0)  # this might be wrong, worried about backprop working through here...
-            indices.append(idx)
-        indices = torch.stack(indices, dim=1)    
-        return indices
+            outputs.append(x_t)
+        outputs = torch.stack(outputs, dim=1)
+        return outputs, hidden
 
 
 class Discriminator(nn.Module):
     def __init__(self, 
                  input_size,  # equal to input_lang.num_words
-                 hidden_size,
-                 num_layers,
+                 hidden_size=256,
+                 num_layers=1,
                  bidirectional=False):
         
         super(Discriminator, self).__init__()
@@ -63,10 +61,9 @@ class Discriminator(nn.Module):
         self.hidden_size = hidden_size
         self.num_layers = num_layers
         self.dirs = 2 if bidirectional else 1
-        
-        self.embedding = nn.Embedding(input_size, hidden_size)
+
         self.gru = nn.GRU(
-            input_size=hidden_size,
+            input_size=input_size,
             hidden_size=hidden_size,
             num_layers=num_layers,
             batch_first=True,
@@ -79,14 +76,9 @@ class Discriminator(nn.Module):
         return h
     
     def forward(self, x, hidden):
-        embedded = []
-        for x_t in torch.unbind(x, 1):
-            x_t = self.embedding(x_t)
-            embedded.append(x_t)
-        embedded = torch.stack(embedded, dim=1)
         
-        _, hidden = self.gru(embedded, hidden)
+        _, hidden = self.gru(x, hidden)
         
         out_class = self.output(hidden.transpose(0, 1).view(x.size(0), -1))
         
-        return out_class     
+        return out_class, hidden
