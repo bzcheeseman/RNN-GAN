@@ -50,9 +50,9 @@ batch = 1
 to_onehot = IdxToOneHot(input_size)
 
 G = Generator(gen_input_size, hidden_size, input_size)
-D = Discriminator(input_size, hidden_size, 64)
+D = Discriminator(input_size, hidden_size, 64, bidirectional=True)
 
-G_optimizer = optim.Adam(G.parameters(), lr=5e-4, weight_decay=1e-3)
+G_optimizer = optim.Adam(G.parameters(), lr=5e-5, weight_decay=1e-3)
 D_optimizer = optim.Adam(D.parameters(), lr=5e-5, weight_decay=1e-4)
 
 criterion = nn.CrossEntropyLoss()
@@ -65,15 +65,13 @@ h_D = D.init_hidden(batch)
 running_loss_gen = 0.0
 running_loss_disc = 0.0
 
-print_steps = 100
-g_ratio = 5
+print_steps = 10
+g_ratio = 2
 
 G.train()
 G.cuda()
 
 D.train()
-
-validate_gen(G, output_lang)
 
 for epoch in range(int(1e5)):
 
@@ -125,4 +123,9 @@ for epoch in range(int(1e5)):
               .format(epoch+1, running_loss_disc/100, running_loss_gen/100))
         running_loss_disc = 0.0
         running_loss_gen = 0.0
+        output_sentence = []
+        for g_t in torch.unbind(x.cpu(), 1):
+            max, idx = torch.max(g_t, 1)
+            output_sentence.append(output_lang.index2word[idx.data[0, 0]])
+        print(" ".join(output_sentence))
         validate_gen(G, output_lang)
