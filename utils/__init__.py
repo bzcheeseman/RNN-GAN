@@ -6,6 +6,8 @@
 # Full license at RNN-GAN/LICENSE.txt
 #
 
+# Taken from the pytorch seq2seq tutorials with minor changes - more changes to be made later on.
+
 from io import open
 import unicodedata
 import string
