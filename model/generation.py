@@ -45,7 +45,7 @@ class Generator(nn.Module):
         indices = []
         for x_t in torch.unbind(x, 1):
             x_t = Funct.softmax(self.decode(x_t))
-            _, idx = torch.max(x_t, 0)  # this might be wrong
+            _, idx = torch.max(x_t, 0)  # this might be wrong, worried about backprop working through here...
             indices.append(idx)
         indices = torch.stack(indices, dim=1)    
         return indices
