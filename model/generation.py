@@ -17,7 +17,7 @@ class Generator(nn.Module):
                  input_size, 
                  hidden_size,
                  num_layers,
-                 output_size,  # the size of the embedding space 
+                 output_size,  # equal to the dimension of the word vector, input_lang.n_words
                  bidirectional=False):
         super(Generator, self).__init__()
         
@@ -53,10 +53,9 @@ class Generator(nn.Module):
 
 class Discriminator(nn.Module):
     def __init__(self, 
-                 input_size, 
+                 input_size,  # equal to input_lang.num_words
                  hidden_size,
                  num_layers,
-                 output_size,  # the size of the embedding space 
                  bidirectional=False):
         
         super(Discriminator, self).__init__()
