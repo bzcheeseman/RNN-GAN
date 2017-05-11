@@ -37,7 +37,7 @@ class Generator(nn.Module):
         self.decode = nn.Linear(self.dirs*hidden_size, output_size)  # take softmax, torch.max, get indices
         
     def init_hidden(self, batch_size):
-        h = Variable(torch.rand(self.dirs*self.num_layers, batch_size, self.hidden_size))
+        h = Variable(torch.zeros(self.dirs*self.num_layers, batch_size, self.hidden_size))
         return h
         
     def forward(self, x, hidden):
@@ -75,7 +75,7 @@ class Discriminator(nn.Module):
         self.output = nn.Linear(self.num_layers*self.dirs*hidden_size, 2)
         
     def init_hidden(self, batch_size):
-        h = Variable(torch.rand(self.dirs*self.num_layers, batch_size, self.hidden_size))
+        h = Variable(torch.zeros(self.dirs*self.num_layers, batch_size, self.hidden_size))
         return h
     
     def forward(self, x, hidden):
@@ -89,6 +89,4 @@ class Discriminator(nn.Module):
         
         out_class = self.output(hidden.transpose(0, 1).view(x.size(0), -1))
         
-        return out_class
-        
-        
+        return out_class     
