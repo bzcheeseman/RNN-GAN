@@ -12,7 +12,7 @@ from torch.autograd import Variable
 import torch.nn.functional as Funct
 
 
-class Encoder(nn.Module):
+class Encoder(nn.Module):  # none of this is going to work properly
     def __init__(self,
                  input_size,
                  hidden_size,
@@ -60,6 +60,7 @@ class Generator(nn.Module):
     def __init__(self,
                  input_size,
                  hidden_size,
+                 output_size,
                  n_layers=1,
                  bidirectional=False,
                  use_cuda=True):
@@ -77,7 +78,7 @@ class Generator(nn.Module):
             batch_first=True,
             bidirectional=bidirectional
         )
-        self.linear = nn.Linear(hidden_size, hidden_size)  # de-embed the features into the data space
+        self.linear = nn.Linear(hidden_size, output_size)
 
     def init_hidden(self, batch_size):
         h = Variable(torch.zeros(self.n_layers * self.dirs, batch_size, self.hidden_size))  # make this learnable?
@@ -89,51 +90,62 @@ class Generator(nn.Module):
     def forward(self, x, hidden):
         x, hidden = self.gru(x, hidden)
 
-        outputs = []
+        indices = []
 
         for x_t in torch.unbind(x, 1):
-            x_t = Funct.sigmoid(self.linear(x_t))
-            outputs.append(x_t)
+            x_t = Funct.softmax(self.linear(x_t))
+            _, idx = torch.max(x_t, 0)  # send out one-hot vectors for most likely word
+            indices.append(idx)
 
-        outputs = torch.stack(outputs, dim=1)
+        indices = torch.stack(indices, dim=1)
 
-        return outputs, hidden
+        return indices, hidden
 
 
 class Discriminator(nn.Module):
     def __init__(self,
                  data_dim,
                  feature_dim,
+                 hidden_size,
                  n_layers=1,
+                 bidirectional=False
                  use_cuda=True):
         super(Discriminator, self).__init__()
 
         self.data_dim = data_dim
         self.feature_dim = feature_dim
+        self.hidden_size = hidden_size
         self.n_layers = n_layers
-        self.dirs = 1
+        self.dirs = 2 if bidirectional else 1
         self.use_cuda = use_cuda
 
-        self.disc_input = 2*feature_dim
+        self.disc_input = data_dim + feature_dim
+        self.enc = nn.Embedding(self.disc_input, hidden_size)
         self.disc_gru = nn.GRU(
-            input_size=self.disc_input,
-            hidden_size=64,
+            input_size=hidden_size,
+            hidden_size=hidden_size,
             batch_first=True,
-            bidirectional=False
+            bidirectional=bidirectional
         )
 
         self.disc = nn.Sequential(
-            nn.Linear(self.dirs * 64, 2),
+            nn.Linear(self.dirs * hidden_size, 2),
             # nn.PReLU(),
             # nn.Linear(64, 2)
         )
 
     def init_hidden(self, batch):
-        h = Variable(torch.zeros(self.n_layers * self.dirs, batch, 64))
+        h = Variable(torch.zeros(self.n_layers * self.dirs, batch, self.hidden_size))
         return h
 
     def forward(self, data, feature, hidden):
         x = torch.cat([data, feature], 2)
-        _, hidden = self.disc_gru(x, hidden)  # wtf
-        x = self.disc(hidden.view(hidden.size(1), -1))
+        embedded = []
+        for x_t in torch.unbind(x, 1):
+            x_t = self.enc(x_t.view(x_t.size(0), -1))
+            embedded.append(x_t)
+        embedded = torch.stack(embedded, dim=1)
+        
+        _, hidden = self.disc_gru(embedded, hidden)
+        x = self.disc(hidden.transpose(0, 1).view(hidden.size(0), -1))
         return x, hidden
