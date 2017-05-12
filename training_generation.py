@@ -43,7 +43,7 @@ def validate_gen(generator, lang, sequence, batch_size=1, gen_input=128):
 input_lang, output_lang, pairs = prepare_data('eng', 'fra', True)
 
 input_size = output_lang.n_words
-gen_hidden_size = 250
+gen_hidden_size = 200
 disc_hidden_size = 128
 gen_input_size = gen_hidden_size
 batch = 1
@@ -58,7 +58,7 @@ D_optimizer = optim.Adam(D.parameters(), lr=5e-5, betas=(0.5, 0.999))
 
 criterion = nn.CrossEntropyLoss()
 
-training_pairs = [variables_from_pair(input_lang, output_lang, random.choice(pairs)) for i in range(int(1e5))]
+training_pairs = [variables_from_pair(input_lang, output_lang, random.choice(pairs)) for i in range(int(1e6))]
 
 h_G = G.init_hidden(batch)
 h_D = D.init_hidden(batch)
@@ -66,7 +66,7 @@ h_D = D.init_hidden(batch)
 running_loss_gen = 0.0
 running_loss_disc = 0.0
 
-print_steps = 100
+print_steps = 1000
 g_ratio = 3
 d_ratio = 1
 
@@ -76,9 +76,9 @@ G.cuda()
 D.train()
 D.cuda()
 
-for epoch in range(int(1e5)):
+for step in range(int(1e6)):
 
-    x = training_pairs[epoch][1]
+    x = training_pairs[step][1]
     x = x.unsqueeze(0).cpu()
 
     x = to_onehot(x.squeeze()).unsqueeze(0)
@@ -127,9 +127,9 @@ for epoch in range(int(1e5)):
     running_loss_gen += loss_gen.data[0]
     running_loss_disc += np.mean(loss_real.data[0] + loss_fake.data[0])
 
-    if epoch % print_steps == print_steps-1:
+    if step % print_steps == print_steps-1:
         print('Iter-{}; D_loss: {:.4}; G_loss: {:.4}'
-              .format(epoch+1, running_loss_disc/print_steps, running_loss_gen/print_steps))
+              .format(step + 1, running_loss_disc / print_steps, running_loss_gen / print_steps))
 
         running_loss_disc = 0.0
         running_loss_gen = 0.0

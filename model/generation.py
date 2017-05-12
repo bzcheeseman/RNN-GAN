@@ -42,10 +42,19 @@ class Generator(nn.Module):
 
         outputs = []
         x_t = x
+        prev_out_is_eos = False
         for i in range(seq_len):
             x_t, hidden = self.gru(x_t, hidden)
 
             out = Funct.softmax(self.decode(x_t.view(x_t.size(0), -1)))  # is this right..need to split into 2 loops?
+
+            _, is_eos = torch.max(out, 1)
+            if is_eos.data[0, 0] == 1:
+                if prev_out_is_eos:  # help generator out, only need one EOS
+                    break
+                else:
+                    prev_out_is_eos = True
+
             outputs.append(out)
 
         outputs = torch.stack(outputs, dim=1)
