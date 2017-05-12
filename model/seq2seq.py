@@ -22,6 +22,7 @@ import torch.nn.functional as F
 # use zip() to combine two lists into a list of tuples
 
 # Prof forcing - https://arxiv.org/pdf/1610.09038.pdf (USE/DO THIS)
+#   https://github.com/t-vi/pytorch-tvmisc/blob/master/wasserstein-distance/Improved_Training_of_Wasserstein_GAN.ipynb
 
 # improve GAN training https://arxiv.org/pdf/1606.03498.pdf
 

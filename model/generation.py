@@ -13,11 +13,10 @@ import torch.nn.functional as Funct
 
 
 class Generator(nn.Module):
-    def __init__(self, 
-                 input_size, 
+    def __init__(self,
                  hidden_size,
                  output_size,  # equal to the dimension of the word vector, input_lang.n_words
-                 num_layers=1,
+                 num_layers=2,
                  bidirectional=False):
         super(Generator, self).__init__()
         
@@ -26,7 +25,7 @@ class Generator(nn.Module):
         self.dirs = 2 if bidirectional else 1
         
         self.gru = nn.GRU(
-            input_size=input_size,
+            input_size=hidden_size,
             hidden_size=hidden_size,
             num_layers=num_layers,
             batch_first=True,
@@ -39,13 +38,18 @@ class Generator(nn.Module):
         h = Variable(torch.zeros(self.dirs*self.num_layers, batch_size, self.hidden_size))
         return h
         
-    def forward(self, x, hidden):
-        x, hidden = self.gru(x, hidden)
+    def forward(self, x, hidden, seq_len):
+
         outputs = []
-        for x_t in torch.unbind(x, 1):
-            x_t = Funct.softmax(self.decode(x_t))
-            outputs.append(x_t)
+        x_t = x
+        for i in range(seq_len):
+            x_t, hidden = self.gru(x_t, hidden)
+
+            out = Funct.softmax(self.decode(x_t.view(x_t.size(0), -1)))  # is this right..need to split into 2 loops?
+            outputs.append(out)
+
         outputs = torch.stack(outputs, dim=1)
+
         return outputs, hidden
 
 
@@ -76,7 +80,7 @@ class Discriminator(nn.Module):
         return h
     
     def forward(self, x, hidden):
-        
+
         _, hidden = self.gru(x, hidden)
         
         out_class = self.output(hidden.transpose(0, 1).view(x.size(0), -1))
