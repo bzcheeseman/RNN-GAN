@@ -86,7 +86,7 @@ D.cuda()
 generated_target = Variable(torch.LongTensor([0]))
 forced_target = Variable(torch.LongTensor([1]))
 
-g_train_range = (0.05, 0.3)
+g_train_range = (0.05, 0.5)
 d_lower_bound = 0.05
 train_g = False
 train_d = True
@@ -101,6 +101,19 @@ for step in range(int(1e5)):
     start_token = x[:, 0, :].unsqueeze(1)
     x_force = x[:, :-1, :]
     # target = x[:, 1:, :]
+
+    # output_sentence = []  # validate real data (just print to make sure it's not BS)
+    # for g_t in torch.unbind(x_force.cpu(), 1):
+    #     max, idx = torch.max(g_t, 1)
+    #     output_sentence.append(output_lang.index2word[idx.data[0, 0]])
+    # print(" ".join(output_sentence))
+    #
+    # output_sentence = []
+    # for word in torch.unbind(target.cpu(), 1):
+    #     output_sentence.append(output_lang.index2word[word.data[0, 0]])
+    # print(" ".join(output_sentence))
+    #
+    # raise NameError
 
     reset_grad([G, D])
     G_optimizer.zero_grad()

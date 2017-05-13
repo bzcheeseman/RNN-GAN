@@ -132,7 +132,7 @@ def get_sos_token():
 
 def variable_from_sentence(lang, sentence):
     indexes = indexes_from_sentence(lang, sentence)
-    indexes.insert(0, SOS_token)
+    # indexes.insert(0, SOS_token)
     indexes.append(EOS_token)
     result = Variable(torch.LongTensor(indexes).view(-1, 1))
     if use_cuda:
