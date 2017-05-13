@@ -23,6 +23,7 @@ import torch.nn.functional as F
 
 # Prof forcing - https://arxiv.org/pdf/1610.09038.pdf (USE/DO THIS)
 #   https://github.com/t-vi/pytorch-tvmisc/blob/master/wasserstein-distance/Improved_Training_of_Wasserstein_GAN.ipynb
+#   Is word by word too hard? Many more combinations exist...
 
 # improve GAN training https://arxiv.org/pdf/1606.03498.pdf
 

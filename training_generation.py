@@ -36,13 +36,13 @@ def validate_gen(generator, lang, sequence, batch_size, z):
     for g_t in torch.unbind(generated.cpu(), 1):
         max, idx = torch.max(g_t, 1)
         output_sentence.append(lang.index2word[idx.data[0, 0]])
-    print(" ".join(output_sentence))
+    print("Generated: ", " ".join(output_sentence))
     return generated.cpu()
 
 input_lang, output_lang, pairs = prepare_data('eng', 'fra', True)
 
 input_size = output_lang.n_words
-hidden_size = 128
+hidden_size = 256
 batch = 1
 
 to_onehot = IdxToOneHot(input_size)
@@ -51,7 +51,7 @@ G = Generator(
     input_size=input_size,
     hidden_size=hidden_size,
     output_size=input_size,
-    num_layers=2,
+    num_layers=1,
     bidirectional=False
 )
 D = Discriminator(
@@ -129,12 +129,12 @@ for step in range(int(1e5)):
         generated, h_gen = G(start_token, h_gen, x.size(1)-1, False)
 
         # Train Discriminator on forced (both should have the same output)
-        h_D = D.init_hidden(batch) + h_force.repeat(2, 1, 1)
+        h_D = D.init_hidden(batch) + h_force.repeat(4, 1, 1)
         forced_d, h_D = D(forced.cuda().detach(), h_D.cuda())
         loss_disc_forced = disc_criterion(forced_d, forced_target.cuda())
 
         # Train Discriminator on generated (both should have the same output)
-        h_D = D.init_hidden(batch) + h_gen.repeat(2, 1, 1)
+        h_D = D.init_hidden(batch) + h_gen.repeat(4, 1, 1)
         gen_d, h_D = D(generated.cuda().detach(), h_D.cuda())
         loss_disc_gen = disc_criterion(gen_d, generated_target.cuda())
 
@@ -173,7 +173,7 @@ for step in range(int(1e5)):
             # loss_forced.backward()
 
             # Train D and G on generated (both should have the same output)
-            h_D = D.init_hidden(batch) + h_gen.repeat(2, 1, 1)
+            h_D = D.init_hidden(batch) + h_gen.repeat(4, 1, 1)
             gen_d, h_D = D(generated.cuda(), h_D.cuda())
             loss_generated = disc_criterion(gen_d, forced_target.cuda())  # swap targets, generator tries to fool disc
             loss_generated.backward()
@@ -205,6 +205,12 @@ for step in range(int(1e5)):
         for g_t in torch.unbind(x[:, 1:, :].cpu(), 1):
             max, idx = torch.max(g_t, 1)
             output_sentence.append(output_lang.index2word[idx.data[0, 0]])
-        print(" ".join(output_sentence))
+        print("Target: ", " ".join(output_sentence))
+        output, _ = G(x_force, h_force, None, True)
+        output_sentence = []
+        for g_t in torch.unbind(output.cpu(), 1):
+            max, idx = torch.max(g_t, 1)
+            output_sentence.append(output_lang.index2word[idx.data[0, 0]])
+        print("Forced: ", " ".join(output_sentence))
 
         validate_gen(G, output_lang, np.random.randint(5, 10), 1, start_token)
