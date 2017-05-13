@@ -66,17 +66,18 @@ for epoch in range(int(1e5)):
 
     x = training_pairs[epoch][0]
     x = x.unsqueeze(0).cpu()
-    z = Variable(torch.rand(batch, x.size(1), hidden_size))
 
     reset_grad([Q, P, D])
 
     x = to_onehot(x.squeeze()).unsqueeze(0)
 
+    z = Variable(torch.zeros(batch, x.size(1), hidden_size))
     E_x, h_E = Q(x.cpu(), h_Q.cpu())
-    G_z, h_G = P(z.cpu(), h_P.cpu())  # problem is ill-formed, G(z) isn't in data space
+    G_z, h_G = P(z.cpu(), h_P.cpu())
 
     D_enc, h_D_enc = D(x, E_x, h_D_enc)
     # target_enc = Variable(torch.LongTensor([0]))
+    z = Variable(torch.zeros(batch, x.size(1), hidden_size))
     D_gen, h_D_gen = D(G_z, z, h_D_gen)
     # target_gen = Variable(torch.LongTensor([1]))
     D_enc = Funct.sigmoid(D_enc)
@@ -94,11 +95,13 @@ for epoch in range(int(1e5)):
     h_D_gen = Variable(h_D_gen.data)
     reset_grad([Q, P, D])
 
+    z = Variable(torch.zeros(batch, x.size(1), hidden_size))
     E_x, h_Q = Q(x.cpu(), h_Q.cpu())
     G_z, h_P = P(z.cpu(), h_P.cpu())
 
     D_enc, h_D_enc = D(x, E_x, h_D_enc)
     # target_enc = Variable(torch.LongTensor([0]))
+    z = Variable(torch.zeros(batch, x.size(1), hidden_size))
     D_gen, h_D_gen = D(G_z, z, h_D_gen)
     # target_gen = Variable(torch.LongTensor([1]))
     D_enc = Funct.sigmoid(D_enc)

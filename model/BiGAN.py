@@ -73,7 +73,7 @@ class Generator(nn.Module):
         self.linear = nn.Linear(hidden_size, output_size)
 
     def init_hidden(self, batch_size):
-        h = Variable(torch.zeros(self.n_layers * self.dirs, batch_size, self.hidden_size))  # make this learnable?
+        h = Variable(torch.rand(self.n_layers * self.dirs, batch_size, self.hidden_size))
         if self.use_cuda:
             return h.cuda()
         else:
@@ -132,6 +132,7 @@ class Discriminator(nn.Module):
         
         x = torch.cat([data, feature], 2)
         
-        _, hidden = self.disc_gru(x, hidden)
-        x = self.disc(hidden.transpose(0, 1).view(hidden.size(0), -1))
+        outputs, hidden = self.disc_gru(x, hidden)
+        outputs = torch.unbind(outputs, dim=1)
+        x = self.disc(outputs[-1].view(outputs.size(0), -1))
         return x, hidden

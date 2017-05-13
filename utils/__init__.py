@@ -36,7 +36,12 @@ class IdxToOneHot:
         self.I = Variable(torch.eye(total_num_indices, total_num_indices))
 
     def forward(self, x):
-        return torch.index_select(self.I, 0, x)
+        out = torch.index_select(self.I, 0, x)
+        # add some noise - not enough to change anything (I don't think)  + Variable(torch.rand(o_t.size())*1e-5)
+        out = torch.stack(
+            [o_t for o_t in torch.unbind(out, 0)]
+        )
+        return out
 
     def __call__(self, input):
         return self.forward(input)
@@ -45,7 +50,7 @@ class IdxToOneHot:
 class Lang:
     def __init__(self, name):
         self.name = name
-        self.word2index = {}
+        self.word2index = {"SOS": 0, "EOS": 1}
         self.word2count = {}
         self.index2word = {0: "SOS", 1: "EOS"}
         self.n_words = 2  # Count SOS and EOS
@@ -117,8 +122,17 @@ def indexes_from_sentence(lang, sentence):
     return [lang.word2index[word] for word in sentence.split(' ')]
 
 
+def get_sos_token():
+    result = Variable(torch.LongTensor([SOS_token]).view(-1, 1))
+    if use_cuda:
+        return result.cuda()
+    else:
+        return result
+
+
 def variable_from_sentence(lang, sentence):
     indexes = indexes_from_sentence(lang, sentence)
+    indexes.insert(0, SOS_token)
     indexes.append(EOS_token)
     result = Variable(torch.LongTensor(indexes).view(-1, 1))
     if use_cuda:

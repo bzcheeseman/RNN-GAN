@@ -14,6 +14,7 @@ import torch.nn.functional as Funct
 
 class Generator(nn.Module):
     def __init__(self,
+                 input_size,
                  hidden_size,
                  output_size,  # equal to the dimension of the word vector, input_lang.n_words
                  num_layers=2,
@@ -25,37 +26,36 @@ class Generator(nn.Module):
         self.dirs = 2 if bidirectional else 1
         
         self.gru = nn.GRU(
-            input_size=hidden_size,
+            input_size=input_size,
             hidden_size=hidden_size,
             num_layers=num_layers,
             batch_first=True,
             bidirectional=bidirectional
         )
         
-        self.decode = nn.Linear(self.dirs*hidden_size, output_size)  # take softmax, torch.max, get indices
+        self.decode = nn.Linear(self.dirs*hidden_size, output_size)  # take softmax
         
     def init_hidden(self, batch_size):
-        h = Variable(torch.zeros(self.dirs*self.num_layers, batch_size, self.hidden_size))
+        h = Variable(torch.rand(self.dirs*self.num_layers, batch_size, self.hidden_size))
         return h
         
-    def forward(self, x, hidden, seq_len):
+    def forward(self, x, hidden, seq_len=None, force=False):
 
         outputs = []
-        x_t = x
-        prev_out_is_eos = False
-        for i in range(seq_len):
-            x_t, hidden = self.gru(x_t, hidden)
-
-            out = Funct.softmax(self.decode(x_t.view(x_t.size(0), -1)))  # is this right..need to split into 2 loops?
-
-            _, is_eos = torch.max(out, 1)
-            if is_eos.data[0, 0] == 1:
-                if prev_out_is_eos:  # help generator out, only need one EOS
-                    break
-                else:
-                    prev_out_is_eos = True
-
-            outputs.append(out)
+        if force:
+            assert seq_len is None
+            x, hidden = self.gru(x, hidden)  # x holds all of the sequence save for EOS
+            for x_t in torch.unbind(x, 1):
+                out = self.decode(x_t.view(x_t.size(0), -1))
+                outputs.append(out)
+        else:
+            assert seq_len
+            x_t = x  # x is only SOS
+            for i in range(seq_len):
+                x_t, hidden = self.gru(x_t, hidden)
+                out = self.decode(x_t.view(x_t.size(0), -1))
+                x_t = out.unsqueeze(1)
+                outputs.append(out)
 
         outputs = torch.stack(outputs, dim=1)
 
@@ -82,7 +82,11 @@ class Discriminator(nn.Module):
             batch_first=True,
             bidirectional=bidirectional
         )
-        self.output = nn.Linear(self.num_layers*self.dirs*hidden_size, 2)
+        self.output = nn.Sequential(
+            nn.Linear(self.dirs*hidden_size, 64),
+            nn.ReLU(),
+            nn.Linear(64, 2)
+        )
         
     def init_hidden(self, batch_size):
         h = Variable(torch.zeros(self.dirs*self.num_layers, batch_size, self.hidden_size))
@@ -90,8 +94,9 @@ class Discriminator(nn.Module):
     
     def forward(self, x, hidden):
 
-        _, hidden = self.gru(x, hidden)
-        
-        out_class = self.output(hidden.transpose(0, 1).view(x.size(0), -1))
+        outputs, hidden = self.gru(x, hidden)
+        outputs = torch.unbind(outputs, 1)  # change this?
+
+        out_class = self.output(outputs[-1].view(x.size(0), -1))
         
         return out_class, hidden

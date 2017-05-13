@@ -27,10 +27,9 @@ def reset_grad(nets):
         net.zero_grad()
 
 
-def validate_gen(generator, lang, sequence, batch_size=1, gen_input=128):
-    z = Variable(torch.rand(batch_size, 1, gen_input))
+def validate_gen(generator, lang, sequence, batch_size, z):
     h = generator.init_hidden(batch_size)
-    generated, h = generator(z.cuda(), h.cuda(), sequence)
+    generated, h = generator(z.cpu(), h.cpu(), sequence)
 
     # print out the sentence
     output_sentence = []
@@ -43,101 +42,156 @@ def validate_gen(generator, lang, sequence, batch_size=1, gen_input=128):
 input_lang, output_lang, pairs = prepare_data('eng', 'fra', True)
 
 input_size = output_lang.n_words
-gen_hidden_size = 200
-disc_hidden_size = 128
-gen_input_size = gen_hidden_size
+hidden_size = 128
 batch = 1
 
 to_onehot = IdxToOneHot(input_size)
 
-G = Generator(hidden_size=gen_hidden_size, output_size=input_size, num_layers=2)
-D = Discriminator(input_size=input_size, hidden_size=disc_hidden_size, bidirectional=False)
+G = Generator(
+    input_size=input_size,
+    hidden_size=hidden_size,
+    output_size=input_size,
+    num_layers=2,
+    bidirectional=False
+)
+D = Discriminator(
+    input_size=input_size,
+    hidden_size=hidden_size,
+    num_layers=2,
+    bidirectional=True
+)
 
-G_optimizer = optim.Adam(G.parameters(), lr=5e-5, betas=(0.5, 0.999))
-D_optimizer = optim.Adam(D.parameters(), lr=5e-5, betas=(0.5, 0.999))
+G_optimizer = optim.Adam(G.parameters(), lr=1e-3, betas=(0.5, 0.999))
+D_optimizer = optim.Adam(D.parameters(), lr=1e-4, betas=(0.5, 0.999))
 
-criterion = nn.CrossEntropyLoss()
+disc_criterion = nn.CrossEntropyLoss()
+gen_criterion = nn.CrossEntropyLoss()
 
-training_pairs = [variables_from_pair(input_lang, output_lang, random.choice(pairs)) for i in range(int(1e6))]
-
-h_G = G.init_hidden(batch)
-h_D = D.init_hidden(batch)
+training_pairs = [variables_from_pair(input_lang, output_lang, random.choice(pairs)) for i in range(int(1e5))]
 
 running_loss_gen = 0.0
 running_loss_disc = 0.0
 
-print_steps = 1000
-g_ratio = 3
+print_steps = 300
+adjust_steps = 100
 d_ratio = 1
+g_ratio = 1
 
 G.train()
-G.cuda()
+# G.cuda()
 
 D.train()
 D.cuda()
 
-for step in range(int(1e6)):
+generated_target = Variable(torch.LongTensor([0]))
+forced_target = Variable(torch.LongTensor([1]))
+
+g_train_range = (0.05, 0.3)
+d_lower_bound = 0.05
+train_g = False
+train_d = True
+
+for step in range(int(1e5)):
 
     x = training_pairs[step][1]
+    target = x.unsqueeze(0)[:, 1:, :]
     x = x.unsqueeze(0).cpu()
 
     x = to_onehot(x.squeeze()).unsqueeze(0)
+    start_token = x[:, 0, :].unsqueeze(1)
+    x_force = x[:, :-1, :]
+    # target = x[:, 1:, :]
 
-    # Train D
-    loss_real = 0.0
-    loss_fake = 0.0
+    reset_grad([G, D])
+    G_optimizer.zero_grad()
+    D_optimizer.zero_grad()
+
     for _i in range(d_ratio):
-        reset_grad([G, D])
-        G_optimizer.zero_grad()
-        D_optimizer.zero_grad()
-        z = Variable(torch.rand(batch, 1, gen_input_size))
-        output_real, h_D = D(x.cuda(), h_D.cuda())
-        target_real = Variable(torch.LongTensor([0])).cuda()
-        loss_real = criterion(output_real, target_real)
-        loss_real.backward()
-        h_D = Variable(h_D.data)
+        # Run forced model
+        h_force = G.init_hidden(batch)
+        forced, h_force = G(x_force, h_force, None, True)
 
-        G_z, h_G = G(z.cuda(), h_G.cuda(), x.size(1))
-        target_fake = Variable(torch.LongTensor([1])).cuda()
-        output_fake, h_D = D(G_z.detach(), h_D.cuda())  # don't train the generator on this part
-        loss_fake = criterion(output_fake, target_fake)
-        loss_fake.backward()
-        h_D = Variable(h_D.data)
-        h_G = Variable(h_G.data)
+        # Run generative model
+        h_gen = G.init_hidden(batch)
+        generated, h_gen = G(start_token, h_gen, x.size(1)-1, False)
 
-        D_optimizer.step()
+        # Train Discriminator on forced (both should have the same output)
+        h_D = D.init_hidden(batch) + h_force.repeat(2, 1, 1)
+        forced_d, h_D = D(forced.cuda().detach(), h_D.cuda())
+        loss_disc_forced = disc_criterion(forced_d, forced_target.cuda())
 
-    # Train G
-    loss_gen = 0.0
+        # Train Discriminator on generated (both should have the same output)
+        h_D = D.init_hidden(batch) + h_gen.repeat(2, 1, 1)
+        gen_d, h_D = D(generated.cuda().detach(), h_D.cuda())
+        loss_disc_gen = disc_criterion(gen_d, generated_target.cuda())
+
+        if train_d:
+            loss_disc_forced.backward()
+            loss_disc_gen.backward()
+            D_optimizer.step()
+
+    running_loss_disc += np.mean(loss_disc_forced.data[0] + loss_disc_gen.data[0])
+    if 0.0 < np.mean(loss_disc_forced.data[0] + loss_disc_gen.data[0]) < d_lower_bound:
+        train_d = False
+    else:
+        train_d = True
+
     for _j in range(g_ratio):
-        reset_grad([G, D])
-        G_optimizer.zero_grad()
-        D_optimizer.zero_grad()
-        z = Variable(torch.rand(batch, 1, gen_input_size))
-        G_z, h_G = G(z.cuda(), h_G.cuda(), x.size(1))
-        target = Variable(torch.LongTensor([0])).cuda()
-        output, h_D = D(G_z.cuda(), h_D.cuda())
-        loss_gen = criterion(output, target)
-        loss_gen.backward()
-        h_D = Variable(h_D.data)
-        h_G = Variable(h_G.data)
-
+        # Train forced model (to get sequence right)
+        h_force = G.init_hidden(batch)
+        forced, h_force = G(x_force, h_force, None, True)
+        loss_gen_forced = 0.0
+        for i, t in enumerate(torch.unbind(forced, 1), 0):
+            loss_gen_forced += gen_criterion(t, target[0, i, :])
+        loss_gen_forced.backward()
         G_optimizer.step()
 
-    running_loss_gen += loss_gen.data[0]
-    running_loss_disc += np.mean(loss_real.data[0] + loss_fake.data[0])
+        if train_g:  # train generator to fool discriminator
+            G_optimizer.zero_grad()
+            D_optimizer.zero_grad()
+            # Train generative model
+            h_gen = G.init_hidden(batch)
+            generated, h_gen = G(start_token, h_gen, x.size(1) - 1, False)
+
+            # Train Discriminator on forced, don't need?
+            # h_D = D.init_hidden(batch) + h_force.repeat(4, 1, 1)
+            # forced_d, h_D = D(forced.cuda().detach(), h_D.cuda())
+            # loss_forced = disc_criterion(forced_d, generated_target.cuda())  # swap targets
+            # loss_forced.backward()
+
+            # Train D and G on generated (both should have the same output)
+            h_D = D.init_hidden(batch) + h_gen.repeat(2, 1, 1)
+            gen_d, h_D = D(generated.cuda(), h_D.cuda())
+            loss_generated = disc_criterion(gen_d, forced_target.cuda())  # swap targets, generator tries to fool disc
+            loss_generated.backward()
+
+            G_optimizer.step()
+            # D_optimizer.step()  # do I need this?
+
+    if train_g:
+        running_loss_gen += np.mean(loss_gen_forced.data[0] + loss_generated.data[0])
+    else:
+        running_loss_gen += loss_gen_forced.data[0]
+
+    # Adjust the ratio of D training to G training
+    if g_train_range[0] <= np.mean(loss_disc_forced.data[0] + loss_disc_gen.data[0]) <= g_train_range[1]:
+        train_g = True
+    else:
+        train_g = False
 
     if step % print_steps == print_steps-1:
-        print('Iter-{}; D_loss: {:.4}; G_loss: {:.4}'
-              .format(step + 1, running_loss_disc / print_steps, running_loss_gen / print_steps))
+        print('Iter-{}; D_loss: {:.4}; G_loss: {:.4}; g/d: {}/{}'
+              .format(step + 1, running_loss_disc / print_steps, running_loss_gen / print_steps, g_ratio, d_ratio))
 
         running_loss_disc = 0.0
         running_loss_gen = 0.0
+        # g_ratio = 1
+        # d_ratio = 2
 
         output_sentence = []  # validate real data (just print to make sure it's not BS)
-        for g_t in torch.unbind(x.cpu(), 1):
+        for g_t in torch.unbind(x[:, 1:, :].cpu(), 1):
             max, idx = torch.max(g_t, 1)
             output_sentence.append(output_lang.index2word[idx.data[0, 0]])
         print(" ".join(output_sentence))
 
-        validate_gen(G, output_lang, x.size(1), gen_input=gen_input_size)
+        validate_gen(G, output_lang, np.random.randint(5, 10), 1, start_token)
