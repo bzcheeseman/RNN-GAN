@@ -182,3 +182,7 @@ def checkpoint(net, name):
 
     torch.save(net.state_dict(), "checkpoints/ckpt_{}.pyt".format(name))
 
+
+def reset_grad(nets):
+    for net in nets:
+        net.zero_grad()

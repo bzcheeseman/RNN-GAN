@@ -50,10 +50,19 @@ class Generator(nn.Module):
             batch_first=False,
             bidirectional=bidirectional
         )
-        
+
+        self._gpu = False
+
+    def cuda(self, device_id=0):
+        self._gpu = True
+        super(Generator, self).cuda(device_id)
+
     def init_hidden(self, batch_size):
         h = Variable(torch.rand(self.dirs*self.num_layers, batch_size, self.hidden_size))
-        return h
+        if self._gpu:
+            return h.cuda()
+        else:
+            return h
         
     def forward(self, x, hidden, seq_len=None, force=False):
 

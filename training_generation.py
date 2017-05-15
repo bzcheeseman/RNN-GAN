@@ -21,12 +21,6 @@ from utils import *
 
 use_cuda = False
 
-
-def reset_grad(nets):
-    for net in nets:
-        net.zero_grad()
-
-
 input_lang, output_lang, pairs = prepare_data('eng', 'fra', True)
 
 embedding_dim = 128
@@ -57,7 +51,7 @@ training_pairs = [variables_from_pair(input_lang, output_lang, random.choice(pai
 print_steps = 500
 
 G.train()
-# G.cuda()
+G.cuda()
 
 D.train()
 # D.cuda()
@@ -99,16 +93,16 @@ for step in range(int(1e5)):  # gotta go through and check the detach() calls
 
     if force:
         g_input = FE(gen_input)
-        fake_embedded, g_hidden = G(g_input.detach(), g_hidden, None, True)
-        fake_prediction, d_hidden = D(fake_embedded.detach(), d_hidden)
+        fake_embedded, g_hidden = G(g_input.detach().cuda(), g_hidden, None, True)
+        fake_prediction, d_hidden = D(fake_embedded.detach().cpu(), d_hidden)
         loss_fake = D_criterion(fake_prediction, generated_target)
         loss_fake.backward()
         d_hidden = Variable(d_hidden.data)
         g_hidden = Variable(g_hidden.data)
     else:
         g_input = FE(sos_token)
-        fake_embedded, g_hidden = G(g_input.detach(), g_hidden, max_length, False)
-        fake_prediction, d_hidden = D(fake_embedded.detach(), d_hidden)
+        fake_embedded, g_hidden = G(g_input.detach().cuda(), g_hidden, max_length, False)
+        fake_prediction, d_hidden = D(fake_embedded.detach().cpu(), d_hidden)
         loss_fake = D_criterion(fake_prediction, generated_target)
         loss_fake.backward()
         d_hidden = Variable(d_hidden.data)
@@ -132,16 +126,16 @@ for step in range(int(1e5)):  # gotta go through and check the detach() calls
     # Train G now
     if force:
         g_input = FE(gen_input)
-        fake_embedded, g_hidden = G(g_input.detach(), g_hidden, None, True)  # we don't want to train FE on G
-        gen_prediction, d_hidden = D(fake_embedded, d_hidden)
+        fake_embedded, g_hidden = G(g_input.detach().cuda(), g_hidden, None, True)  # we don't want to train FE
+        gen_prediction, d_hidden = D(fake_embedded.cpu(), d_hidden)
         loss_gen = D_criterion(gen_prediction, real_target)  # G tries to make real-looking data
         loss_gen.backward()
         d_hidden = Variable(d_hidden.data)
         g_hidden = Variable(g_hidden.data)
     else:
         g_input = FE(sos_token)
-        fake_embedded, g_hidden = G(g_input.detach(), g_hidden, max_length, False)  # don't train FE on G
-        gen_prediction, d_hidden = D(fake_embedded, d_hidden)
+        fake_embedded, g_hidden = G(g_input.detach().cuda(), g_hidden, max_length, False)  # don't train FE on G
+        gen_prediction, d_hidden = D(fake_embedded.cpu(), d_hidden)
         loss_gen = D_criterion(gen_prediction, real_target)  # G tries to make real-looking data
         loss_gen.backward()
         d_hidden = Variable(d_hidden.data)
@@ -155,6 +149,9 @@ for step in range(int(1e5)):  # gotta go through and check the detach() calls
             step+1, D_running_loss/print_steps, G_running_loss/print_steps, IFE_running_loss/print_steps
         ))
 
+        D.eval()
+        G.eval()
+
         output_sentence_inverse = []
         for g_t in inverse_out:
             max, idx = g_t.data.topk(1)
@@ -166,9 +163,9 @@ for step in range(int(1e5)):  # gotta go through and check the detach() calls
 
         print("Real: {} - Inverse: {}".format(output_sentence, output_sentence_inverse))
 
-        if IFE_running_loss/print_steps < 8.0:
+        if IFE_running_loss/print_steps < 12.0:
             validate_gen(FE, G, InvFE, output_lang, sequence=np.random.randint(5, 10),
-                         batch_size=1, sos_token=sos_token)
+                         batch_size=1, sos_token=sos_token.cuda())
 
         D_running_loss = 0.0
         G_running_loss = 0.0
@@ -178,3 +175,6 @@ for step in range(int(1e5)):  # gotta go through and check the detach() calls
         checkpoint(InvFE, "ife")
         checkpoint(G, "g")
         checkpoint(D, "d")
+
+        D.train()
+        G.train()
