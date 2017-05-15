@@ -134,5 +134,5 @@ class Discriminator(nn.Module):
         
         outputs, hidden = self.disc_gru(x, hidden)
         outputs = torch.unbind(outputs, dim=1)
-        x = self.disc(outputs[-1].view(outputs.size(0), -1))
+        x = self.disc(outputs[-1].view(x.size(0), -1))
         return x, hidden

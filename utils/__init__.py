@@ -13,6 +13,7 @@ import unicodedata
 import string
 import re
 import random
+import os
 
 import torch
 from torch.autograd import Variable
@@ -132,7 +133,7 @@ def get_sos_token():
 
 def variable_from_sentence(lang, sentence):
     indexes = indexes_from_sentence(lang, sentence)
-    # indexes.insert(0, SOS_token)
+    indexes.insert(0, SOS_token)
     indexes.append(EOS_token)
     result = Variable(torch.LongTensor(indexes).view(-1, 1))
     if use_cuda:
@@ -160,3 +161,24 @@ def variables_from_pair(input_lang, output_lang, pair):
     input_variable = variable_from_sentence(input_lang, pair[0])
     target_variable = variable_from_sentence(output_lang, pair[1])
     return input_variable, target_variable
+
+
+def validate_gen(fe, g, invfe, lang, sequence, batch_size, sos_token):
+    h = g.init_hidden(batch_size)
+    g_input = fe(sos_token)
+    fake_embedded, h = g(g_input.detach(), h, sequence, False)
+
+    # print out the sentence
+    output_sentence = []
+    for g_t in torch.unbind(fake_embedded.cpu(), 0):
+        word = invfe(g_t)
+        max, idx = word.data.topk(1)
+        output_sentence.append(lang.index2word[idx[0, 0]])
+    print("Generated: ", " ".join(output_sentence))
+
+
+def checkpoint(net, name):
+    os.makedirs("checkpoints", exist_ok=True)
+
+    torch.save(net.state_dict(), "checkpoints/ckpt_{}.pyt".format(id, name))
+
