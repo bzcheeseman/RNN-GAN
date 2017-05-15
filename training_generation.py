@@ -166,7 +166,7 @@ for step in range(int(1e5)):  # gotta go through and check the detach() calls
 
         print("Real: {} - Inverse: {}".format(output_sentence, output_sentence_inverse))
 
-        if IFE_running_loss/print_steps < 13.0:
+        if IFE_running_loss/print_steps < 8.0:
             validate_gen(FE, G, InvFE, output_lang, sequence=np.random.randint(5, 10),
                          batch_size=1, sos_token=sos_token)
 

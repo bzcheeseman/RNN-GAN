@@ -180,5 +180,5 @@ def validate_gen(fe, g, invfe, lang, sequence, batch_size, sos_token):
 def checkpoint(net, name):
     os.makedirs("checkpoints", exist_ok=True)
 
-    torch.save(net.state_dict(), "checkpoints/ckpt_{}.pyt".format(id, name))
+    torch.save(net.state_dict(), "checkpoints/ckpt_{}.pyt".format(name))
 
