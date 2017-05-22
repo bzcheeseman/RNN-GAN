@@ -170,9 +170,9 @@ def validate_gen(fe, g, invfe, lang, sequence, batch_size, sos_token):
 
     # print out the sentence
     output_sentence = []
-    for g_t in torch.unbind(fake_embedded.cpu(), 0):
+    for g_t in torch.unbind(fake_embedded, 0):
         word = invfe(g_t)
-        max, idx = word.data.topk(1)
+        max, idx = word.cpu().data.topk(1)
         output_sentence.append(lang.index2word[idx[0, 0]])
     print("Generated: ", " ".join(output_sentence))
 

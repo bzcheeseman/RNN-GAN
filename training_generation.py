@@ -28,8 +28,8 @@ gen_hidden_size = embedding_dim
 batch = 1
 max_length = 10
 
-FE = FeatureExtractor(output_lang.n_words, embedding_dim)
-InvFE = InverseFeatureExtractor(embedding_dim, output_lang.n_words)
+FE = FeatureExtractor(output_lang.n_words, embedding_dim).cuda()
+InvFE = InverseFeatureExtractor(embedding_dim, output_lang.n_words).cuda()
 G = Generator(
     hidden_size=embedding_dim
 )
@@ -39,7 +39,7 @@ D = Discriminator(
 )
 
 FE_optimizer = optim.Adam(FE.parameters(), lr=1e-4, weight_decay=1e-6)
-InvFE_optimizer = optim.Adam(InvFE.parameters(), lr=1e-4, weight_decay=1e-6)
+InvFE_optimizer = optim.Adam(InvFE.parameters(), lr=1e-5, weight_decay=1e-6)
 G_optimizer = optim.Adam(G.parameters(), lr=1e-5)
 D_optimizer = optim.Adam(D.parameters(), lr=1e-5)
 
@@ -67,8 +67,8 @@ generated_target = Variable(torch.LongTensor([1]))
 d_hidden = D.init_hidden(batch)
 g_hidden = G.init_hidden(batch)
 
-teacher_forcing_ratio = 0.2
-ife_ratio = 1
+teacher_forcing_ratio = 0.5
+ife_ratio = 3
 
 G_running_loss = 0.0
 D_running_loss = 0.0
@@ -82,8 +82,8 @@ for step in range(int(1e5)):  # gotta go through and check the detach() calls
     sos_token = x[0, :].unsqueeze(0)
 
     # Train D, feature extractor, inverse
-    real_embedded = FE(target)  # embed the target
-    real_prediction, d_hidden = D(real_embedded, d_hidden)
+    real_embedded = FE(target.cuda())  # embed the target
+    real_prediction, d_hidden = D(real_embedded.cpu(), d_hidden)
     loss_real = D_criterion(real_prediction, real_target)
     loss_real.backward()
     d_hidden = Variable(d_hidden.data)
@@ -92,7 +92,7 @@ for step in range(int(1e5)):  # gotta go through and check the detach() calls
     force = True if random.random() < teacher_forcing_ratio else False
 
     if force:
-        g_input = FE(gen_input)
+        g_input = FE(gen_input.cuda())
         fake_embedded, g_hidden = G(g_input.detach().cuda(), g_hidden, None, True)
         fake_prediction, d_hidden = D(fake_embedded.detach().cpu(), d_hidden)
         loss_fake = D_criterion(fake_prediction, generated_target)
@@ -100,7 +100,7 @@ for step in range(int(1e5)):  # gotta go through and check the detach() calls
         d_hidden = Variable(d_hidden.data)
         g_hidden = Variable(g_hidden.data)
     else:
-        g_input = FE(sos_token)
+        g_input = FE(sos_token.cuda())
         fake_embedded, g_hidden = G(g_input.detach().cuda(), g_hidden, max_length, False)
         fake_prediction, d_hidden = D(fake_embedded.detach().cpu(), d_hidden)
         loss_fake = D_criterion(fake_prediction, generated_target)
@@ -116,16 +116,16 @@ for step in range(int(1e5)):  # gotta go through and check the detach() calls
     for _i in range(ife_ratio):
         inverse_out = []
         for i, targ in enumerate(torch.unbind(target, 0), 0):
-            inverse = InvFE(real_embedded[i].detach())
+            inverse = InvFE(real_embedded[i].detach().cuda())
             inverse_out.append(Funct.softmax(inverse))
-            loss_inv = FE_criterion(inverse, target[i])
+            loss_inv = FE_criterion(inverse, target[i].cuda())
             loss_inv.backward()
-            IFE_running_loss += loss_inv.data[0]
-        InvFE_optimizer.step()
+            IFE_running_loss += loss_inv.data[0]/ife_ratio
+            InvFE_optimizer.step()
 
     # Train G now
     if force:
-        g_input = FE(gen_input)
+        g_input = FE(gen_input.cuda())
         fake_embedded, g_hidden = G(g_input.detach().cuda(), g_hidden, None, True)  # we don't want to train FE
         gen_prediction, d_hidden = D(fake_embedded.cpu(), d_hidden)
         loss_gen = D_criterion(gen_prediction, real_target)  # G tries to make real-looking data
@@ -133,7 +133,7 @@ for step in range(int(1e5)):  # gotta go through and check the detach() calls
         d_hidden = Variable(d_hidden.data)
         g_hidden = Variable(g_hidden.data)
     else:
-        g_input = FE(sos_token)
+        g_input = FE(sos_token.cuda())
         fake_embedded, g_hidden = G(g_input.detach().cuda(), g_hidden, max_length, False)  # don't train FE on G
         gen_prediction, d_hidden = D(fake_embedded.cpu(), d_hidden)
         loss_gen = D_criterion(gen_prediction, real_target)  # G tries to make real-looking data
@@ -163,7 +163,7 @@ for step in range(int(1e5)):  # gotta go through and check the detach() calls
 
         print("Real: {} - Inverse: {}".format(output_sentence, output_sentence_inverse))
 
-        if IFE_running_loss/print_steps < 12.0:
+        if IFE_running_loss/print_steps < 12.0 or G_running_loss/print_steps < 0.3:
             validate_gen(FE, G, InvFE, output_lang, sequence=np.random.randint(5, 10),
                          batch_size=1, sos_token=sos_token.cuda())
 
